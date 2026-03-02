@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF切割工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover {
+            border-color: #4a90d9;
+            background: #f8fafc;
+        }
+        .upload-area.dragover {
+            border-color: #4a90d9;
+            background: #e8f4fd;
+        }
+        .settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .setting-item label {
+            font-size: 14px;
+            color: #666;
+        }
+        .setting-item input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .setting-item input:focus {
+            outline: none;
+            border-color: #4a90d9;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #4a90d9;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #357abd;
+        }
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #28a745;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #218838;
+        }
+        .thumbnails {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .thumbnail {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .thumbnail .remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .panel h3 {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+        .gif-container {
+            text-align: center;
+        }
+        .gif-container img {
+            max-width: 100%;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .split-gifs {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .split-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .split-item img {
+            max-width: 200px;
+            border-radius: 4px;
+        }
+        .split-item .info {
+            font-size: 12px;
+            color: #666;
+        }
+        .progress {
+            width: 100%;
+            height: 4px;
+            background: #eee;
+            border-radius: 2px;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #4a90d9;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="upload-area" id="uploadArea">
+                <p>点击或拖拽图片到此处上传</p>
+                <p style="font-size: 12px; color: #999; margin-top: 10px;">支持 JPG、PNG、GIF 格式</p>
+                <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+            </div>
+            <div class="thumbnails" id="thumbnails"></div>
+            
+            <div class="settings">
+                <div class="setting-item">
+                    <label>GIF宽度 (px)</label>
+                    <input type="number" id="gifWidth" value="600" min="100" max="1200">
+                </div>
+                <div class="setting-item">
+                    <label>时间间隔 (ms)</label>
+                    <input type="number" id="interval" value="500" min="100" max="5000" step="100">
+                </div>
+                <div class="setting-item">
+                    <label>Gap高度 (px)</label>
+                    <input type="number" id="gapHeight" value="0" min="0" max="50">
+                </div>
+                <div class="setting-item">
+                    <label>每份高度 (px)</label>
+                    <input type="number" id="sliceHeight" value="60" min="20" max="200">
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button class="btn btn-primary" id="generateBtn" disabled>生成GIF</button>
+                <button class="btn btn-secondary" id="copyBtn" disabled>复制所有GIF</button>
+            </div>
+            <div class="progress" id="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="status" id="status"></div>
+        </div>
+        
+        <div class="main-content">
+            <div class="panel">
+                <h3>完整GIF预览</h3>
+                <div class="gif-container" id="fullGifContainer">
+                    <div class="empty-state">请上传图片并点击生成</div>
+                </div>
+            </div>
+            <div class="panel">
+                <h3>切割后的GIF</h3>
+                <div class="split-gifs" id="splitGifsContainer">
+                    <div class="empty-state">生成后将在此显示切割后的GIF</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const thumbnails = document.getElementById('thumbnails');
+        const generateBtn = document.getElementById('generateBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const fullGifContainer = document.getElementById('fullGifContainer');
+        const splitGifsContainer = document.getElementById('splitGifsContainer');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const status = document.getElementById('status');
+        
+        let uploadedImages = [];
+        let generatedGifs = [];
+        let fullGifBlob = null;
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+        
+        function handleFiles(files) {
+            for (let file of files) {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            uploadedImages.push({
+                                src: e.target.result,
+                                img: img,
+                                name: file.name
+                            });
+                            updateThumbnails();
+                            generateBtn.disabled = uploadedImages.length < 1;
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+        }
+        
+        function updateThumbnails() {
+            thumbnails.innerHTML = '';
+            uploadedImages.forEach((image, index) => {
+                const div = document.createElement('div');
+                div.className = 'thumbnail';
+                div.innerHTML = `
+                    <img src="${image.src}" alt="${image.name}">
+                    <button class="remove" data-index="${index}">×</button>
+                `;
+                thumbnails.appendChild(div);
+            });
+            
+            thumbnails.querySelectorAll('.remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.dataset.index);
+                    uploadedImages.splice(index, 1);
+                    updateThumbnails();
+                    generateBtn.disabled = uploadedImages.length < 1;
+                });
+            });
+        }
+        
+        generateBtn.addEventListener('click', generateGifs);
+        
+        async function generateGifs() {
+            const gifWidth = parseInt(document.getElementById('gifWidth').value);
+            const interval = parseInt(document.getElementById('interval').value);
+            const gapHeight = parseInt(document.getElementById('gapHeight').value);
+            const sliceHeight = parseInt(document.getElementById('sliceHeight').value);
+            
+            if (uploadedImages.length === 0) return;
+            
+            generateBtn.disabled = true;
+            progress.style.display = 'block';
+            status.textContent = '正在处理图片...';
+            
+            try {
+                const resizedImages = await resizeImages(uploadedImages, gifWidth);
+                const totalHeight = resizedImages[0].height;
+                
+                status.textContent = '正在生成完整GIF...';
+                fullGifBlob = await createGif(resizedImages, interval, (p) => {
+                    progressBar.style.width = p * 50 + '%';
+                });
+                
+                const fullGifUrl = URL.createObjectURL(fullGifBlob);
+                fullGifContainer.innerHTML = `<img src="${fullGifUrl}" alt="完整GIF">`;
+                
+                const effectiveSliceHeight = sliceHeight - gapHeight;
+                const numSlices = Math.floor(totalHeight / sliceHeight);
+                
+                generatedGifs = [];
+                splitGifsContainer.innerHTML = '';
+                
+                for (let i = 0; i < numSlices; i++) {
+                    status.textContent = `正在生成切割GIF ${i + 1}/${numSlices}...`;
+                    progressBar.style.width = (50 + (i / numSlices) * 50) + '%';
+                    
+                    const startY = i * sliceHeight;
+                    const slicedImages = resizedImages.map(imgData => {
+                        return sliceImage(imgData, startY, effectiveSliceHeight);
+                    });
+                    
+                    const sliceGifBlob = await createGif(slicedImages, interval);
+                    const sliceGifUrl = URL.createObjectURL(sliceGifBlob);
+                    generatedGifs.push({ blob: sliceGifBlob, url: sliceGifUrl, index: i + 1 });
+                    
+                    const item = document.createElement('div');
+                    item.className = 'split-item';
+                    item.innerHTML = `
+                        <img src="${sliceGifUrl}" alt="切割GIF ${i + 1}">
+                        <div class="info">
+                            <div>GIF #${i + 1}</div>
+                            <div>尺寸: ${gifWidth} × ${effectiveSliceHeight}px</div>
+                            <div>位置: Y=${startY}px</div>
+                        </div>
+                    `;
+                    splitGifsContainer.appendChild(item);
+                }
+                
+                status.textContent = `生成完成！共 ${numSlices} 个切割GIF`;
+                copyBtn.disabled = false;
+            } catch (error) {
+                status.textContent = '生成失败: ' + error.message;
+                console.error(error);
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+        
+        function resizeImages(images, targetWidth) {
+            return Promise.all(images.map(imageData => {
+                return new Promise((resolve) => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    const img = imageData.img;
+                    const ratio = targetWidth / img.width;
+                    const targetHeight = Math.round(img.height * ratio);
+                    
+                    canvas.width = targetWidth;
+                    canvas.height = targetHeight;
+                    
+                    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                    
+                    const newImg = new Image();
+                    newImg.onload = () => {
+                        resolve({
+                            img: newImg,
+                            width: targetWidth,
+                            height: targetHeight,
+                            canvas: canvas
+                        });
+                    };
+                    newImg.src = canvas.toDataURL('image/png');
+                });
+            }));
+        }
+        
+        function sliceImage(imageData, startY, height) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = imageData.width;
+            canvas.height = height;
+            
+            ctx.drawImage(
+                imageData.img,
+                0, startY, imageData.width, height,
+                0, 0, imageData.width, height
+            );
+            
+            const newImg = new Image();
+            return new Promise((resolve) => {
+                newImg.onload = () => resolve({
+                    img: newImg,
+                    width: imageData.width,
+                    height: height,
+                    canvas: canvas
+                });
+                newImg.src = canvas.toDataURL('image/png');
+            });
+        }
+        
+        function createGif(images, delay, onProgress) {
+            return new Promise((resolve, reject) => {
+                const gif = new GIF({
+                    workers: 2,
+                    quality: 10,
+                    width: images[0].width,
+                    height: images[0].height,
+                    workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+                });
+                
+                images.forEach(imageData => {
+                    gif.addFrame(imageData.canvas || imageData.img, { delay: delay });
+                });
+                
+                gif.on('progress', (p) => {
+                    if (onProgress) onProgress(p);
+                });
+                
+                gif.on('finished', (blob) => {
+                    resolve(blob);
+                });
+                
+                gif.on('error', (error) => {
+                    reject(error);
+                });
+                
+                gif.render();
+            });
+        }
+        
+        copyBtn.addEventListener('click', async () => {
+            if (generatedGifs.length === 0) return;
+            
+            copyBtn.disabled = true;
+            status.textContent = '正在复制GIF...';
+            
+            try {
+                const allGifs = [fullGifBlob, ...generatedGifs.map(g => g.blob)];
+                
+                for (let i = 0; i < allGifs.length; i++) {
+                    const blob = allGifs[i];
+                    if (blob) {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                [blob.type]: blob
+                            })
+                        ]);
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+                }
+                
+                status.textContent = '已复制所有GIF到剪贴板！';
+            } catch (error) {
+                status.textContent = '复制失败，请尝试右键保存图片';
+                console.error(error);
+            } finally {
+                copyBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
