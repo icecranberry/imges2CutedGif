@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GIF切割工具</title>
-    <script src="https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js" type="module"></script>
     <style>
         * {
             margin: 0;
@@ -208,7 +207,7 @@
             <div class="settings">
                 <div class="setting-item">
                     <label>GIF宽度 (px)</label>
-                    <input type="number" id="gifWidth" value="600" min="100" max="1200">
+                    <input type="number" id="gifWidth" value="500" min="100" max="1200">
                 </div>
                 <div class="setting-item">
                     <label>时间间隔 (ms)</label>
@@ -216,7 +215,7 @@
                 </div>
                 <div class="setting-item">
                     <label>Gap高度 (px)</label>
-                    <input type="number" id="gapHeight" value="0" min="0" max="50">
+                    <input type="number" id="gapHeight" value="5" min="0" max="50">
                 </div>
                 <div class="setting-item">
                     <label>每份高度 (px)</label>
@@ -271,30 +270,37 @@
         let fullGifBlob = null;
         let currentGapHeight = 0;
         
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', (e) => {
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        uploadArea.addEventListener('dragover', function(e) {
             e.preventDefault();
             uploadArea.classList.add('dragover');
         });
-        uploadArea.addEventListener('dragleave', () => {
+        
+        uploadArea.addEventListener('dragleave', function() {
             uploadArea.classList.remove('dragover');
         });
-        uploadArea.addEventListener('drop', (e) => {
+        
+        uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
             handleFiles(e.dataTransfer.files);
         });
-        fileInput.addEventListener('change', (e) => {
+        
+        fileInput.addEventListener('change', function(e) {
             handleFiles(e.target.files);
         });
         
         function handleFiles(files) {
-            for (let file of files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
                 if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
-                    reader.onload = (e) => {
+                    reader.onload = function(e) {
                         const img = new Image();
-                        img.onload = () => {
+                        img.onload = function() {
                             uploadedImages.push({
                                 src: e.target.result,
                                 img: img,
@@ -312,24 +318,23 @@
         
         function updateThumbnails() {
             thumbnails.innerHTML = '';
-            uploadedImages.forEach((image, index) => {
+            for (let i = 0; i < uploadedImages.length; i++) {
+                const image = uploadedImages[i];
                 const div = document.createElement('div');
                 div.className = 'thumbnail';
-                div.innerHTML = `
-                    <img src="${image.src}" alt="${image.name}">
-                    <button class="remove" data-index="${index}">×</button>
-                `;
+                div.innerHTML = '<img src="' + image.src + '" alt="' + image.name + '"><button class="remove" data-index="' + i + '">×</button>';
                 thumbnails.appendChild(div);
-            });
+            }
             
-            thumbnails.querySelectorAll('.remove').forEach(btn => {
-                btn.addEventListener('click', (e) => {
+            const removeButtons = thumbnails.querySelectorAll('.remove');
+            for (let i = 0; i < removeButtons.length; i++) {
+                removeButtons[i].addEventListener('click', function(e) {
                     const index = parseInt(e.target.dataset.index);
                     uploadedImages.splice(index, 1);
                     updateThumbnails();
                     generateBtn.disabled = uploadedImages.length < 1;
                 });
-            });
+            }
         }
         
         generateBtn.addEventListener('click', generateGifs);
@@ -353,13 +358,13 @@
                 status.textContent = '正在生成完整GIF...';
                 progressBar.style.width = '10%';
                 
-                await new Promise(r => setTimeout(r, 10));
+                await new Promise(function(resolve) { setTimeout(resolve, 10); });
                 
                 fullGifBlob = createGif(resizedCanvases, interval);
                 progressBar.style.width = '50%';
                 
                 const fullGifUrl = URL.createObjectURL(fullGifBlob);
-                fullGifContainer.innerHTML = `<img src="${fullGifUrl}" alt="完整GIF">`;
+                fullGifContainer.innerHTML = '<img src="' + fullGifUrl + '" alt="完整GIF">';
                 
                 const effectiveSliceHeight = sliceHeight - gapHeight;
                 const numSlices = Math.floor(totalHeight / sliceHeight);
@@ -370,13 +375,13 @@
                 splitGifsContainer.style.gap = gapHeight + 'px';
                 
                 for (let i = 0; i < numSlices; i++) {
-                    status.textContent = `正在生成切割GIF ${i + 1}/${numSlices}...`;
+                    status.textContent = '正在生成切割GIF ' + (i + 1) + '/' + numSlices + '...';
                     progressBar.style.width = (50 + (i / numSlices) * 50) + '%';
                     
-                    await new Promise(r => setTimeout(r, 10));
+                    await new Promise(function(resolve) { setTimeout(resolve, 10); });
                     
                     const startY = i * sliceHeight;
-                    const slicedCanvases = resizedCanvases.map(canvas => {
+                    const slicedCanvases = resizedCanvases.map(function(canvas) {
                         return sliceCanvas(canvas, startY, effectiveSliceHeight);
                     });
                     
@@ -386,11 +391,11 @@
                     
                     const img = document.createElement('img');
                     img.src = sliceGifUrl;
-                    img.alt = `切割GIF ${i + 1}`;
+                    img.alt = '切割GIF ' + (i + 1);
                     splitGifsContainer.appendChild(img);
                 }
                 
-                status.textContent = `生成完成！共 ${numSlices} 个切割GIF`;
+                status.textContent = '生成完成！共 ' + numSlices + ' 个切割GIF';
                 downloadAllBtn.disabled = false;
                 copyAllBtn.disabled = false;
             } catch (error) {
@@ -402,8 +407,8 @@
         }
         
         function resizeImages(images, targetWidth) {
-            return Promise.all(images.map(imageData => {
-                return new Promise((resolve) => {
+            return Promise.all(images.map(function(imageData) {
+                return new Promise(function(resolve) {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     
@@ -427,11 +432,7 @@
             newCanvas.width = canvas.width;
             newCanvas.height = height;
             
-            ctx.drawImage(
-                canvas,
-                0, startY, canvas.width, height,
-                0, 0, canvas.width, height
-            );
+            ctx.drawImage(canvas, 0, startY, canvas.width, height, 0, 0, canvas.width, height);
             
             return newCanvas;
         }
@@ -443,22 +444,24 @@
             const encoder = new GIFEncoder();
             
             const allFrames = [];
-            canvases.forEach(canvas => {
+            for (let i = 0; i < canvases.length; i++) {
+                const canvas = canvases[i];
                 const ctx = canvas.getContext('2d');
                 const imageData = ctx.getImageData(0, 0, width, height);
                 allFrames.push(imageData.data);
-            });
+            }
             
             const globalPalette = quantize(allFrames[0], 256, { format: 'rgba4444' });
             
-            allFrames.forEach((data) => {
+            for (let i = 0; i < allFrames.length; i++) {
+                const data = allFrames[i];
                 const indexedPixels = applyPalette(data, globalPalette, { format: 'rgba4444' });
                 encoder.writeFrame(indexedPixels, width, height, { 
                     palette: globalPalette,
                     delay: delay,
                     repeat: 0
                 });
-            });
+            }
             
             const buffer = encoder.bytes();
             return new Blob([buffer], { type: 'image/gif' });
@@ -471,7 +474,7 @@
             a.click();
         };
         
-        downloadAllBtn.addEventListener('click', async () => {
+        downloadAllBtn.addEventListener('click', async function() {
             if (generatedGifs.length === 0) return;
             
             downloadAllBtn.disabled = true;
@@ -480,8 +483,8 @@
             try {
                 for (let i = 0; i < generatedGifs.length; i++) {
                     const gif = generatedGifs[i];
-                    window.downloadGif(gif.url, `slice_${i + 1}.gif`);
-                    await new Promise(r => setTimeout(r, 300));
+                    window.downloadGif(gif.url, 'slice_' + (i + 1) + '.gif');
+                    await new Promise(function(resolve) { setTimeout(resolve, 300); });
                 }
                 
                 status.textContent = '下载完成！';
@@ -493,31 +496,46 @@
             }
         });
         
-        copyAllBtn.addEventListener('click', async () => {
+        copyAllBtn.addEventListener('click', async function() {
             if (generatedGifs.length === 0) return;
             
             copyAllBtn.disabled = true;
-            status.textContent = '正在复制GIF...';
+            status.textContent = '正在准备复制...';
             
             try {
+                const htmlParts = [];
+                
                 for (let i = 0; i < generatedGifs.length; i++) {
                     const gif = generatedGifs[i];
-                    try {
-                        await navigator.clipboard.write([
-                            new ClipboardItem({
-                                [gif.blob.type]: gif.blob
-                            })
-                        ]);
-                        status.textContent = `已复制 GIF ${i + 1}/${generatedGifs.length}`;
-                        await new Promise(r => setTimeout(r, 500));
-                    } catch (e) {
-                        console.error('复制失败:', e);
-                    }
+                    
+                    const reader = new FileReader();
+                    const base64Promise = new Promise(function(resolve) {
+                        reader.onload = function() {
+                            resolve(reader.result);
+                        };
+                        reader.readAsDataURL(gif.blob);
+                    });
+                    const base64 = await base64Promise;
+                    
+                    htmlParts.push('<img src="' + base64 + '">');
+                    status.textContent = '正在处理 ' + (i + 1) + '/' + generatedGifs.length + '...';
                 }
-                status.textContent = '复制完成！';
-            } catch (error) {
-                status.textContent = '复制失败，部分浏览器不支持复制GIF';
-                console.error(error);
+                
+                const html = htmlParts.join('<br>');
+                
+                window.focus();
+                
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'text/html': new Blob([html], { type: 'text/html' }),
+                        'text/plain': new Blob(['共 ' + generatedGifs.length + ' 个GIF'], { type: 'text/plain' })
+                    })
+                ]);
+                
+                status.textContent = '已复制 ' + generatedGifs.length + ' 个GIF，可粘贴到QQ';
+            } catch (e) {
+                console.error('复制失败:', e);
+                status.textContent = '复制失败: ' + e.message;
             } finally {
                 copyAllBtn.disabled = false;
             }
