@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GIF切割工具</title>
-    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js" type="module"></script>
     <style>
         * {
             margin: 0;
@@ -207,6 +207,19 @@
             padding: 40px;
             color: #999;
         }
+        .download-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            background: #4a90d9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        .download-btn:hover {
+            background: #357abd;
+        }
     </style>
 </head>
 <body>
@@ -240,7 +253,7 @@
             
             <div class="buttons">
                 <button class="btn btn-primary" id="generateBtn" disabled>生成GIF</button>
-                <button class="btn btn-secondary" id="copyBtn" disabled>复制所有GIF</button>
+                <button class="btn btn-secondary" id="downloadAllBtn" disabled>下载所有GIF</button>
             </div>
             <div class="progress" id="progress">
                 <div class="progress-bar" id="progressBar"></div>
@@ -264,12 +277,14 @@
         </div>
     </div>
     
-    <script>
+    <script type="module">
+        import { GIFEncoder, quantize, applyPalette } from 'https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js';
+        
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const thumbnails = document.getElementById('thumbnails');
         const generateBtn = document.getElementById('generateBtn');
-        const copyBtn = document.getElementById('copyBtn');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
         const fullGifContainer = document.getElementById('fullGifContainer');
         const splitGifsContainer = document.getElementById('splitGifsContainer');
         const progress = document.getElementById('progress');
@@ -356,16 +371,22 @@
             status.textContent = '正在处理图片...';
             
             try {
-                const resizedImages = await resizeImages(uploadedImages, gifWidth);
-                const totalHeight = resizedImages[0].height;
+                const resizedCanvases = await resizeImages(uploadedImages, gifWidth);
+                const totalHeight = resizedCanvases[0].height;
                 
                 status.textContent = '正在生成完整GIF...';
-                fullGifBlob = await createGif(resizedImages, interval, (p) => {
-                    progressBar.style.width = p * 50 + '%';
-                });
+                progressBar.style.width = '10%';
+                
+                await new Promise(r => setTimeout(r, 10));
+                
+                fullGifBlob = createGif(resizedCanvases, interval);
+                progressBar.style.width = '50%';
                 
                 const fullGifUrl = URL.createObjectURL(fullGifBlob);
-                fullGifContainer.innerHTML = `<img src="${fullGifUrl}" alt="完整GIF">`;
+                fullGifContainer.innerHTML = `
+                    <img src="${fullGifUrl}" alt="完整GIF">
+                    <br><button class="download-btn" onclick="downloadGif('${fullGifUrl}', 'full.gif')">下载</button>
+                `;
                 
                 const effectiveSliceHeight = sliceHeight - gapHeight;
                 const numSlices = Math.floor(totalHeight / sliceHeight);
@@ -377,12 +398,14 @@
                     status.textContent = `正在生成切割GIF ${i + 1}/${numSlices}...`;
                     progressBar.style.width = (50 + (i / numSlices) * 50) + '%';
                     
+                    await new Promise(r => setTimeout(r, 10));
+                    
                     const startY = i * sliceHeight;
-                    const slicedImages = resizedImages.map(imgData => {
-                        return sliceImage(imgData, startY, effectiveSliceHeight);
+                    const slicedCanvases = resizedCanvases.map(canvas => {
+                        return sliceCanvas(canvas, startY, effectiveSliceHeight);
                     });
                     
-                    const sliceGifBlob = await createGif(slicedImages, interval);
+                    const sliceGifBlob = createGif(slicedCanvases, interval);
                     const sliceGifUrl = URL.createObjectURL(sliceGifBlob);
                     generatedGifs.push({ blob: sliceGifBlob, url: sliceGifUrl, index: i + 1 });
                     
@@ -394,13 +417,14 @@
                             <div>GIF #${i + 1}</div>
                             <div>尺寸: ${gifWidth} × ${effectiveSliceHeight}px</div>
                             <div>位置: Y=${startY}px</div>
+                            <button class="download-btn" onclick="downloadGif('${sliceGifUrl}', 'slice_${i + 1}.gif')">下载</button>
                         </div>
                     `;
                     splitGifsContainer.appendChild(item);
                 }
                 
                 status.textContent = `生成完成！共 ${numSlices} 个切割GIF`;
-                copyBtn.disabled = false;
+                downloadAllBtn.disabled = false;
             } catch (error) {
                 status.textContent = '生成失败: ' + error.message;
                 console.error(error);
@@ -423,103 +447,84 @@
                     canvas.height = targetHeight;
                     
                     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-                    
-                    const newImg = new Image();
-                    newImg.onload = () => {
-                        resolve({
-                            img: newImg,
-                            width: targetWidth,
-                            height: targetHeight,
-                            canvas: canvas
-                        });
-                    };
-                    newImg.src = canvas.toDataURL('image/png');
+                    resolve(canvas);
                 });
             }));
         }
         
-        function sliceImage(imageData, startY, height) {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+        function sliceCanvas(canvas, startY, height) {
+            const newCanvas = document.createElement('canvas');
+            const ctx = newCanvas.getContext('2d');
             
-            canvas.width = imageData.width;
-            canvas.height = height;
+            newCanvas.width = canvas.width;
+            newCanvas.height = height;
             
             ctx.drawImage(
-                imageData.img,
-                0, startY, imageData.width, height,
-                0, 0, imageData.width, height
+                canvas,
+                0, startY, canvas.width, height,
+                0, 0, canvas.width, height
             );
             
-            const newImg = new Image();
-            return new Promise((resolve) => {
-                newImg.onload = () => resolve({
-                    img: newImg,
-                    width: imageData.width,
-                    height: height,
-                    canvas: canvas
-                });
-                newImg.src = canvas.toDataURL('image/png');
-            });
+            return newCanvas;
         }
         
-        function createGif(images, delay, onProgress) {
-            return new Promise((resolve, reject) => {
-                const gif = new GIF({
-                    workers: 2,
-                    quality: 10,
-                    width: images[0].width,
-                    height: images[0].height,
-                    workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
-                });
-                
-                images.forEach(imageData => {
-                    gif.addFrame(imageData.canvas || imageData.img, { delay: delay });
-                });
-                
-                gif.on('progress', (p) => {
-                    if (onProgress) onProgress(p);
-                });
-                
-                gif.on('finished', (blob) => {
-                    resolve(blob);
-                });
-                
-                gif.on('error', (error) => {
-                    reject(error);
-                });
-                
-                gif.render();
+        function createGif(canvases, delay) {
+            const width = canvases[0].width;
+            const height = canvases[0].height;
+            
+            const encoder = new GIFEncoder();
+            
+            const allFrames = [];
+            canvases.forEach(canvas => {
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, width, height);
+                allFrames.push(imageData.data);
             });
+            
+            const globalPalette = quantize(allFrames[0], 256, { format: 'rgba4444' });
+            
+            allFrames.forEach((data) => {
+                const indexedPixels = applyPalette(data, globalPalette, { format: 'rgba4444' });
+                encoder.writeFrame(indexedPixels, width, height, { 
+                    palette: globalPalette,
+                    delay: delay,
+                    repeat: 0
+                });
+            });
+            
+            const buffer = encoder.bytes();
+            return new Blob([buffer], { type: 'image/gif' });
         }
         
-        copyBtn.addEventListener('click', async () => {
+        window.downloadGif = function(url, filename) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+        };
+        
+        downloadAllBtn.addEventListener('click', async () => {
             if (generatedGifs.length === 0) return;
             
-            copyBtn.disabled = true;
-            status.textContent = '正在复制GIF...';
+            downloadAllBtn.disabled = true;
+            status.textContent = '正在下载GIF...';
             
             try {
-                const allGifs = [fullGifBlob, ...generatedGifs.map(g => g.blob)];
+                window.downloadGif(URL.createObjectURL(fullGifBlob), 'full.gif');
+                await new Promise(r => setTimeout(r, 300));
                 
-                for (let i = 0; i < allGifs.length; i++) {
-                    const blob = allGifs[i];
-                    if (blob) {
-                        await navigator.clipboard.write([
-                            new ClipboardItem({
-                                [blob.type]: blob
-                            })
-                        ]);
-                        await new Promise(r => setTimeout(r, 300));
-                    }
+                for (let i = 0; i < generatedGifs.length; i++) {
+                    const gif = generatedGifs[i];
+                    window.downloadGif(gif.url, `slice_${i + 1}.gif`);
+                    await new Promise(r => setTimeout(r, 300));
                 }
                 
-                status.textContent = '已复制所有GIF到剪贴板！';
+                status.textContent = '下载完成！';
             } catch (error) {
-                status.textContent = '复制失败，请尝试右键保存图片';
+                status.textContent = '下载失败';
                 console.error(error);
             } finally {
-                copyBtn.disabled = false;
+                downloadAllBtn.disabled = false;
             }
         });
     </script>
