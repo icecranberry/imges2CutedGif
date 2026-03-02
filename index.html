@@ -163,25 +163,11 @@
         .split-gifs {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-        .split-item {
-            display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
+            max-height: 600px;
         }
-        .split-item img {
-            max-width: 200px;
-            border-radius: 4px;
-        }
-        .split-item .info {
-            font-size: 12px;
-            color: #666;
+        .split-gifs img {
+            display: block;
         }
         .progress {
             width: 100%;
@@ -206,19 +192,6 @@
             text-align: center;
             padding: 40px;
             color: #999;
-        }
-        .download-btn {
-            padding: 4px 12px;
-            font-size: 12px;
-            background: #4a90d9;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-        .download-btn:hover {
-            background: #357abd;
         }
     </style>
 </head>
@@ -254,6 +227,7 @@
             <div class="buttons">
                 <button class="btn btn-primary" id="generateBtn" disabled>生成GIF</button>
                 <button class="btn btn-secondary" id="downloadAllBtn" disabled>下载所有GIF</button>
+                <button class="btn btn-secondary" id="copyAllBtn" disabled style="background: #6c757d;">复制所有GIF</button>
             </div>
             <div class="progress" id="progress">
                 <div class="progress-bar" id="progressBar"></div>
@@ -285,6 +259,7 @@
         const thumbnails = document.getElementById('thumbnails');
         const generateBtn = document.getElementById('generateBtn');
         const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const copyAllBtn = document.getElementById('copyAllBtn');
         const fullGifContainer = document.getElementById('fullGifContainer');
         const splitGifsContainer = document.getElementById('splitGifsContainer');
         const progress = document.getElementById('progress');
@@ -294,6 +269,7 @@
         let uploadedImages = [];
         let generatedGifs = [];
         let fullGifBlob = null;
+        let currentGapHeight = 0;
         
         uploadArea.addEventListener('click', () => fileInput.click());
         uploadArea.addEventListener('dragover', (e) => {
@@ -383,16 +359,15 @@
                 progressBar.style.width = '50%';
                 
                 const fullGifUrl = URL.createObjectURL(fullGifBlob);
-                fullGifContainer.innerHTML = `
-                    <img src="${fullGifUrl}" alt="完整GIF">
-                    <br><button class="download-btn" onclick="downloadGif('${fullGifUrl}', 'full.gif')">下载</button>
-                `;
+                fullGifContainer.innerHTML = `<img src="${fullGifUrl}" alt="完整GIF">`;
                 
                 const effectiveSliceHeight = sliceHeight - gapHeight;
                 const numSlices = Math.floor(totalHeight / sliceHeight);
                 
+                currentGapHeight = gapHeight;
                 generatedGifs = [];
                 splitGifsContainer.innerHTML = '';
+                splitGifsContainer.style.gap = gapHeight + 'px';
                 
                 for (let i = 0; i < numSlices; i++) {
                     status.textContent = `正在生成切割GIF ${i + 1}/${numSlices}...`;
@@ -409,22 +384,15 @@
                     const sliceGifUrl = URL.createObjectURL(sliceGifBlob);
                     generatedGifs.push({ blob: sliceGifBlob, url: sliceGifUrl, index: i + 1 });
                     
-                    const item = document.createElement('div');
-                    item.className = 'split-item';
-                    item.innerHTML = `
-                        <img src="${sliceGifUrl}" alt="切割GIF ${i + 1}">
-                        <div class="info">
-                            <div>GIF #${i + 1}</div>
-                            <div>尺寸: ${gifWidth} × ${effectiveSliceHeight}px</div>
-                            <div>位置: Y=${startY}px</div>
-                            <button class="download-btn" onclick="downloadGif('${sliceGifUrl}', 'slice_${i + 1}.gif')">下载</button>
-                        </div>
-                    `;
-                    splitGifsContainer.appendChild(item);
+                    const img = document.createElement('img');
+                    img.src = sliceGifUrl;
+                    img.alt = `切割GIF ${i + 1}`;
+                    splitGifsContainer.appendChild(img);
                 }
                 
                 status.textContent = `生成完成！共 ${numSlices} 个切割GIF`;
                 downloadAllBtn.disabled = false;
+                copyAllBtn.disabled = false;
             } catch (error) {
                 status.textContent = '生成失败: ' + error.message;
                 console.error(error);
@@ -510,9 +478,6 @@
             status.textContent = '正在下载GIF...';
             
             try {
-                window.downloadGif(URL.createObjectURL(fullGifBlob), 'full.gif');
-                await new Promise(r => setTimeout(r, 300));
-                
                 for (let i = 0; i < generatedGifs.length; i++) {
                     const gif = generatedGifs[i];
                     window.downloadGif(gif.url, `slice_${i + 1}.gif`);
@@ -525,6 +490,36 @@
                 console.error(error);
             } finally {
                 downloadAllBtn.disabled = false;
+            }
+        });
+        
+        copyAllBtn.addEventListener('click', async () => {
+            if (generatedGifs.length === 0) return;
+            
+            copyAllBtn.disabled = true;
+            status.textContent = '正在复制GIF...';
+            
+            try {
+                for (let i = 0; i < generatedGifs.length; i++) {
+                    const gif = generatedGifs[i];
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                [gif.blob.type]: gif.blob
+                            })
+                        ]);
+                        status.textContent = `已复制 GIF ${i + 1}/${generatedGifs.length}`;
+                        await new Promise(r => setTimeout(r, 500));
+                    } catch (e) {
+                        console.error('复制失败:', e);
+                    }
+                }
+                status.textContent = '复制完成！';
+            } catch (error) {
+                status.textContent = '复制失败，部分浏览器不支持复制GIF';
+                console.error(error);
+            } finally {
+                copyAllBtn.disabled = false;
             }
         });
     </script>
